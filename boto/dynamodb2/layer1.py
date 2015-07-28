@@ -27,6 +27,7 @@ from boto.connection import AWSQueryConnection
 from boto.regioninfo import RegionInfo
 from boto.exception import JSONResponseError
 from boto.dynamodb2 import exceptions
+import inspect
 
 
 class DynamoDBConnection(AWSQueryConnection):
@@ -2874,13 +2875,12 @@ class DynamoDBConnection(AWSQueryConnection):
                     # was exceeded.
                     raise exceptions.ProvisionedThroughputExceededException(
                         response.status, response.reason, data)
-            elif 'ConditionalCheckFailedException' in data.get('__type'):
-                raise exceptions.ConditionalCheckFailedException(
-                    response.status, response.reason, data)
-            elif 'ValidationException' in data.get('__type'):
-                raise exceptions.ValidationException(
-                    response.status, response.reason, data)
             else:
+                # We raise whichever JSONResponseError is named like the incoming response type
+                for name, obj in inspect.getmembers(exceptions):
+                    if (inspect.isclass(obj) and name in data.get('__type') and
+                            issubclass(obj, JSONResponseError)):
+                        raise obj(response.status, response.reason, data)
                 raise self.ResponseError(response.status, response.reason,
                                          data)
         expected_crc32 = response.getheader('x-amz-crc32')
